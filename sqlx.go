@@ -328,6 +328,32 @@ func (db *DB) Get(dest interface{}, query string, args ...interface{}) error {
 	return Get(db, dest, query, args...)
 }
 
+func (db *DB) Find(dest interface{}, query string, args ...interface{}) error {
+	row, err := db.NamedQuery(query, args)
+	if err != nil {
+		return err
+	}
+	for row.Next() {
+		err = row.StructScan(dest)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// slice
+func (db *DB) FindMany(dest interface{}, query string, args ...interface{}) error {
+
+	rows, err := db.NamedQuery(query, args)
+	if err != nil {
+		return err
+	}
+	// if something happens here, we want to make sure the rows are Closed
+	defer rows.Close()
+	return scanAll(rows, dest, false)
+}
+
 // MustBegin starts a transaction, and panics on error.  Returns an *sqlx.Tx instead
 // of an *sql.Tx.
 func (db *DB) MustBegin() *Tx {
@@ -691,6 +717,11 @@ func Select(q Queryer, dest interface{}, query string, args ...interface{}) erro
 // Any placeholder parameters are replaced with supplied args.
 // An error is returned if the result set is empty.
 func Get(q Queryer, dest interface{}, query string, args ...interface{}) error {
+	r := q.QueryRowx(query, args...)
+	return r.scanAny(dest, false)
+}
+
+func GetNameQuery(q Queryer, dest interface{}, query string, args ...interface{}) error {
 	r := q.QueryRowx(query, args...)
 	return r.scanAny(dest, false)
 }
