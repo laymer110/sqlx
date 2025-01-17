@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"path/filepath"
 	"reflect"
 	"sync"
+	"time"
 
 	"github.com/laymer110/sqlx/reflectx"
 )
@@ -621,6 +623,11 @@ func (r *Rows) MapScan(dest map[string]interface{}) error {
 	return MapScan(r, dest)
 }
 
+// MapStringScan using this Rows.
+func (r *Rows) MapStringScan(dest map[string]string) error {
+	return MapStringScan(r, dest)
+}
+
 // StructScan is like sql.Rows.Scan, but scans a single Row into a single Struct.
 // Use this and iterate over Rows manually when the memory load of Select() might be
 // prohibitive.  *Rows.StructScan caches the reflect work of matching up column
@@ -770,6 +777,11 @@ func (r *Row) MapScan(dest map[string]interface{}) error {
 	return MapScan(r, dest)
 }
 
+// MapScan using this Rows.
+func (r *Row) MapStringScan(dest map[string]string) error {
+	return MapStringScan(r, dest)
+}
+
 func (r *Row) scanAny(dest interface{}, structOnly bool) error {
 	if r.err != nil {
 		return r.err
@@ -886,6 +898,47 @@ func MapScan(r ColScanner, dest map[string]interface{}) error {
 
 	for i, column := range columns {
 		dest[column] = *(values[i].(*interface{}))
+	}
+
+	return r.Err()
+}
+
+func MapStringScan(r ColScanner, dest map[string]string) error {
+	// ignore r.started, since we needn't use reflect for anything.
+	columns, err := r.Columns()
+	if err != nil {
+		return err
+	}
+
+	values := make([]interface{}, len(columns))
+	for i := range values {
+		values[i] = new(interface{})
+	}
+
+	err = r.Scan(values...)
+	if err != nil {
+		return err
+	}
+
+	for i, column := range columns {
+		tt := *(values[i].(*interface{}))
+		if tt == nil {
+			continue
+		}
+		switch nn := tt.(type) {
+		case int64:
+			dest[column] = fmt.Sprintf("%v", nn)
+		case string:
+			dest[column] = nn
+		case time.Time:
+			dest[column] = nn.Format(time.DateTime)
+		case []byte:
+			dest[column] = string(nn)
+		default:
+			y := reflect.TypeOf(nn)
+			log.Println("column exsit no binding data,kind=", y.Kind())
+		}
+
 	}
 
 	return r.Err()
